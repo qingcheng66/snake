@@ -22,6 +22,8 @@ const Snake: React.FC = () => {
   const [direction, setDirection] = useState<'UP' | 'DOWN' | 'LEFT' | 'RIGHT'>('RIGHT');
   const [gameOver, setGameOver] = useState(false);
   const [score, setScore] = useState(0);
+  const [playerName, setPlayerName] = useState('');
+  const [gameStarted, setGameStarted] = useState(false);
 
   const generateFood = () => {
     const newFood = {
@@ -132,14 +134,22 @@ const Snake: React.FC = () => {
   };
 
   useEffect(() => {
-    const gameLoop = setInterval(moveSnake, 100);
-    window.addEventListener('keydown', handleKeyPress);
+    if (gameStarted) {
+      const gameLoop = setInterval(moveSnake, 100);
+      window.addEventListener('keydown', handleKeyPress);
 
-    return () => {
-      clearInterval(gameLoop);
-      window.removeEventListener('keydown', handleKeyPress);
-    };
-  }, [snake, direction, gameOver]);
+      return () => {
+        clearInterval(gameLoop);
+        window.removeEventListener('keydown', handleKeyPress);
+      };
+    }
+  }, [snake, direction, gameOver, gameStarted]);
+
+  useEffect(() => {
+    if (gameOver) {
+      saveScore();
+    }
+  }, [gameOver]);
 
   useEffect(() => {
     drawGame();
@@ -151,26 +161,84 @@ const Snake: React.FC = () => {
     setGameOver(false);
     setScore(0);
     generateFood();
+    setGameStarted(false);
+    setPlayerName('');
+    setSaveStatus('idle');
+  };
+
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
+
+  const saveScore = async () => {
+    try {
+      setSaveStatus('idle');
+      const response = await fetch('/api/score', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: playerName, score }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to save score');
+      setSaveStatus('success');
+      console.log('Score saved successfully:', data);
+    } catch (error) {
+      console.error('Error saving score:', error);
+      setSaveStatus('error');
+    }
+  };
+
+  const startGame = () => {
+    if (playerName.trim()) {
+      setGameStarted(true);
+    }
   };
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 p-4">
-      <div className="text-white text-2xl mb-4">Score: {score}</div>
-      <canvas
-        ref={canvasRef}
-        width={CANVAS_SIZE}
-        height={CANVAS_SIZE}
-        className="border-2 border-white rounded"
-      />
-      {gameOver && (
-        <div className="mt-4">
+      {!gameStarted ? (
+        <div className="flex flex-col items-center gap-4">
+          <input
+            type="text"
+            value={playerName}
+            onChange={(e) => setPlayerName(e.target.value)}
+            placeholder="Enter your name"
+            className="px-4 py-2 rounded text-black"
+          />
           <button
-            onClick={resetGame}
-            className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+            onClick={startGame}
+            disabled={!playerName.trim()}
+            className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 disabled:opacity-50"
           >
-            Play Again
+            Start Game
           </button>
         </div>
+      ) : (
+        <>
+          <div className="text-white text-2xl mb-4">Score: {score}</div>
+          <canvas
+            ref={canvasRef}
+            width={CANVAS_SIZE}
+            height={CANVAS_SIZE}
+            className="border-2 border-white rounded"
+          />
+          {gameOver && (
+            <div className="mt-4 flex flex-col items-center gap-4">
+              {saveStatus === 'success' && (
+                <div className="text-green-500">分数保存成功！</div>
+              )}
+              {saveStatus === 'error' && (
+                <div className="text-red-500">分数保存失败，请重试</div>
+              )}
+              <button
+                onClick={resetGame}
+                className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+              >
+                Play Again
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
